@@ -13,18 +13,24 @@
         </div>
         <div>
           <h1 class="title">PORT SECURITY RADAR</h1>
-          <p class="subtitle">端口暴露风险扫描面板</p>
+          <p class="subtitle">端口暴露风险扫描面板 v3.0</p>
         </div>
       </div>
       <div class="header-actions">
         <div class="scan-time" v-if="scanData">
           <span class="pulse"></span>
           {{ formatTime(scanData.scannedAt) }}
+          <span v-if="scanData.cached" class="cached-badge">缓存</span>
         </div>
-        <button class="btn-scan" @click="performScan" :class="{ scanning: loading }">
-          <span class="btn-icon">⟲</span>
-          {{ loading ? '扫描中...' : '重新扫描' }}
-        </button>
+        <div class="header-btns">
+          <button class="btn-icon" @click="showHistory = !showHistory" title="历史记录">📊</button>
+          <button class="btn-icon" @click="exportCSV" title="导出 CSV">📥</button>
+          <button class="btn-icon" @click="exportJSON" title="导出 JSON">📋</button>
+          <button class="btn-scan" @click="performScan" :class="{ scanning: loading }">
+            <span class="btn-icon">⟲</span>
+            {{ loading ? '扫描中...' : '重新扫描' }}
+          </button>
+        </div>
       </div>
     </header>
 
@@ -44,6 +50,11 @@
           <div class="stat-icon">📡</div>
           <div class="stat-value">{{ scanData.summary.total }}</div>
           <div class="stat-label">监听端口</div>
+        </div>
+        <div class="stat-card docker" v-if="scanData.summary.dockerContainers">
+          <div class="stat-icon">🐳</div>
+          <div class="stat-value">{{ scanData.summary.dockerContainers }}</div>
+          <div class="stat-label">Docker 容器</div>
         </div>
         <div class="stat-card critical">
           <div class="stat-icon">🔴</div>
@@ -83,6 +94,15 @@
         </div>
       </section>
 
+      <!-- Firewall Rules -->
+      <section class="firewall-section" v-if="firewallRules">
+        <div class="section-header">
+          <h3>🔥 防火墙规则建议</h3>
+          <button class="btn-copy" @click="copyFirewallRules">复制规则</button>
+        </div>
+        <pre class="firewall-code">{{ firewallRules }}</pre>
+      </section>
+
       <!-- Search & Filters -->
       <section class="filters-section">
         <div class="search-box">
@@ -119,6 +139,7 @@
                 <th>进程</th>
                 <th>PID</th>
                 <th>绑定类型</th>
+                <th>Docker</th>
                 <th>安全建议</th>
               </tr>
             </thead>
@@ -143,6 +164,12 @@
                 <td>
                   <span class="bind-badge">{{ port.bindType }}</span>
                 </td>
+                <td>
+                  <span v-if="port.docker" class="docker-badge" :title="port.docker.image">
+                    🐳 {{ port.docker.name }}
+                  </span>
+                  <span v-else>-</span>
+                </td>
                 <td class="advice-cell">{{ port.advice }}</td>
               </tr>
             </tbody>
@@ -161,6 +188,7 @@
               <div class="port-info">
                 <span class="port-number">:{{ port.port }}</span>
                 <span class="protocol-badge">{{ port.netid }}</span>
+                <span v-if="port.docker" class="docker-badge">🐳 {{ port.docker.name }}</span>
               </div>
               <span class="severity-badge" :class="port.severity">
                 {{ severityText(port.severity) }}
@@ -188,6 +216,73 @@
       </section>
     </main>
 
+    <!-- History Panel -->
+    <aside class="history-panel" v-if="showHistory">
+      <div class="history-header">
+        <h3>📊 扫描历史</h3>
+        <button class="btn-close" @click="showHistory = false">✕</button>
+      </div>
+      <div class="history-tabs">
+        <button 
+          :class="{ active: historyTab === 'scans' }" 
+          @click="historyTab = 'scans'"
+        >
+          扫描记录
+        </button>
+        <button 
+          :class="{ active: historyTab === 'changes' }" 
+          @click="historyTab = 'changes'"
+        >
+          端口变化
+        </button>
+        <button 
+          :class="{ active: historyTab === 'stats' }" 
+          @click="historyTab = 'stats'"
+        >
+          统计趋势
+        </button>
+      </div>
+      
+      <div class="history-content">
+        <!-- Scans History -->
+        <div v-if="historyTab === 'scans'" class="history-list">
+          <div v-for="scan in history" :key="scan.id" class="history-item">
+            <div class="history-time">{{ formatTime(scan.scanned_at) }}</div>
+            <div class="history-stats">
+              <span class="critical">{{ scan.critical }}</span> /
+              <span class="high">{{ scan.high }}</span> /
+              <span class="medium">{{ scan.medium }}</span> /
+              <span class="low">{{ scan.low }}</span>
+            </div>
+            <div class="history-total">共 {{ scan.total }} 个端口</div>
+          </div>
+        </div>
+        
+        <!-- Changes History -->
+        <div v-if="historyTab === 'changes'" class="history-list">
+          <div v-for="change in changes" :key="change.id" class="history-item change-item">
+            <div class="change-type" :class="change.change_type">
+              {{ change.change_type === 'added' ? '➕ 新增' : change.change_type === 'removed' ? '➖ 关闭' : '⚠️ 变化' }}
+            </div>
+            <div class="change-port">:{{ change.port }}</div>
+            <div class="change-time">{{ formatTime(change.detected_at) }}</div>
+          </div>
+        </div>
+        
+        <!-- Stats Trend -->
+        <div v-if="historyTab === 'stats'" class="stats-trend">
+          <div v-for="stat in stats" :key="stat.date" class="trend-item">
+            <div class="trend-date">{{ stat.date }}</div>
+            <div class="trend-bar">
+              <div class="trend-fill critical" :style="{ width: (stat.avg_critical / stat.avg_total * 100) + '%' }"></div>
+              <div class="trend-fill high" :style="{ width: (stat.avg_high / stat.avg_total * 100) + '%' }"></div>
+            </div>
+            <div class="trend-value">{{ stat.scan_count }} 次扫描</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
     <!-- Loading State -->
     <div v-else-if="loading" class="loading-state">
       <div class="scanner-animation">
@@ -201,7 +296,8 @@
 
     <!-- Footer -->
     <footer class="footer">
-      <p>🛡️ Port Security Radar v2.0 · Built with Vue 3</p>
+      <p>🛡️ Port Security Radar v3.0 · Built with Vue 3 + Fastify</p>
+      <p class="footer-features">History · Alerts · Docker · Firewall Rules · CSV Export</p>
     </footer>
   </div>
 </template>
@@ -217,13 +313,20 @@ const scanData = ref(null)
 const loading = ref(false)
 const searchQuery = ref('')
 const activeFilter = ref('all')
+const showHistory = ref(false)
+const historyTab = ref('scans')
+const history = ref([])
+const changes = ref([])
+const stats = ref([])
+const firewallRules = ref(null)
 
 const filters = [
   { label: '全部', value: 'all' },
   { label: '风险端口', value: 'risky' },
   { label: '高危敏感', value: 'critical' },
   { label: '公网绑定', value: 'public-bind' },
-  { label: '本机回环', value: 'loopback' }
+  { label: '本机回环', value: 'loopback' },
+  { label: 'Docker', value: 'docker' }
 ]
 
 const riskScore = computed(() => {
@@ -237,7 +340,6 @@ const filteredPorts = computed(() => {
   if (!scanData.value) return []
   let ports = scanData.value.ports
   
-  // Search filter
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
     ports = ports.filter(p => 
@@ -245,7 +347,6 @@ const filteredPorts = computed(() => {
     )
   }
   
-  // Category filter
   if (activeFilter.value === 'risky') {
     ports = ports.filter(p => ['critical', 'high', 'medium'].includes(p.severity))
   } else if (activeFilter.value === 'critical') {
@@ -254,6 +355,8 @@ const filteredPorts = computed(() => {
     ports = ports.filter(p => p.bindType === 'public-bind')
   } else if (activeFilter.value === 'loopback') {
     ports = ports.filter(p => p.bindType === 'loopback')
+  } else if (activeFilter.value === 'docker') {
+    ports = ports.filter(p => p.docker)
   }
   
   return ports
@@ -273,10 +376,63 @@ async function performScan() {
   try {
     const res = await fetch('/api/scan?ts=' + Date.now())
     scanData.value = await res.json()
+    
+    // Also fetch firewall rules
+    const fwRes = await fetch('/api/firewall')
+    const fwData = await fwRes.json()
+    firewallRules.value = fwData.rules
   } catch (e) {
     console.error('Scan failed:', e)
   } finally {
     loading.value = false
+  }
+}
+
+async function fetchHistory() {
+  try {
+    const [histRes, changesRes, statsRes] = await Promise.all([
+      fetch('/api/history?limit=20'),
+      fetch('/api/changes?limit=30'),
+      fetch('/api/stats?days=7')
+    ])
+    history.value = await histRes.json()
+    changes.value = await changesRes.json()
+    stats.value = await statsRes.json()
+  } catch (e) {
+    console.error('Failed to fetch history:', e)
+  }
+}
+
+async function exportCSV() {
+  try {
+    const res = await fetch('/api/export/csv')
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `port-scan-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    console.error('Export failed:', e)
+  }
+}
+
+function exportJSON() {
+  if (!scanData.value) return
+  const blob = new Blob([JSON.stringify(scanData.value, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `port-scan-${new Date().toISOString().slice(0, 10)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function copyFirewallRules() {
+  if (firewallRules.value) {
+    navigator.clipboard.writeText(firewallRules.value)
+    alert('已复制到剪贴板！')
   }
 }
 
@@ -285,6 +441,7 @@ useIntervalFn(performScan, 60000)
 
 onMounted(() => {
   performScan()
+  fetchHistory()
 })
 </script>
 
@@ -304,6 +461,7 @@ onMounted(() => {
   --high: #f97316;
   --medium: #eab308;
   --low: #22c55e;
+  --docker: #2496ed;
   --font-mono: 'JetBrains Mono', monospace;
   --font-display: 'Orbitron', sans-serif;
 }
@@ -430,12 +588,26 @@ body {
   gap: 16px;
 }
 
+.header-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .scan-time {
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+.cached-badge {
+  padding: 2px 6px;
+  background: rgba(234, 179, 8, 0.2);
+  color: var(--medium);
+  border-radius: 4px;
+  font-size: 10px;
 }
 
 .pulse {
@@ -449,6 +621,25 @@ body {
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(1.5); }
+}
+
+.btn-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-icon:hover {
+  border-color: var(--accent-cyan);
+  background: rgba(34, 211, 238, 0.1);
 }
 
 .btn-scan {
@@ -476,16 +667,6 @@ body {
   cursor: not-allowed;
 }
 
-.btn-icon {
-  font-size: 18px;
-  animation: spin 2s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 /* Main Content */
 .main {
   max-width: 1400px;
@@ -496,7 +677,7 @@ body {
 /* Stats Row */
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 16px;
   margin-bottom: 24px;
 }
@@ -524,6 +705,7 @@ body {
 .stat-card.high { border-color: rgba(249, 115, 22, 0.5); }
 .stat-card.medium { border-color: rgba(234, 179, 8, 0.5); }
 .stat-card.low { border-color: rgba(34, 197, 94, 0.5); }
+.stat-card.docker { border-color: rgba(36, 150, 237, 0.5); }
 
 .stat-icon {
   font-size: 24px;
@@ -579,6 +761,54 @@ body {
   color: var(--text-secondary);
   margin-bottom: 16px;
   font-weight: 600;
+}
+
+/* Firewall Section */
+.firewall-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.section-header h3 {
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.btn-copy {
+  padding: 8px 16px;
+  background: rgba(34, 211, 238, 0.2);
+  border: 1px solid var(--accent-cyan);
+  border-radius: 6px;
+  color: var(--accent-cyan);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-copy:hover {
+  background: rgba(34, 211, 238, 0.3);
+}
+
+.firewall-code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 16px;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--accent-cyan);
+  overflow-x: auto;
+  line-height: 1.6;
 }
 
 /* Filters Section */
@@ -761,6 +991,16 @@ body {
   font-size: 11px;
 }
 
+.docker-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(36, 150, 237, 0.2);
+  color: var(--docker);
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: help;
+}
+
 .advice-cell {
   max-width: 300px;
   color: var(--text-secondary);
@@ -835,6 +1075,179 @@ body {
   line-height: 1.5;
 }
 
+/* History Panel */
+.history-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 360px;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  backdrop-filter: blur(20px);
+  z-index: 200;
+  overflow-y: auto;
+  transform: translateX(0);
+  transition: transform 0.3s ease;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.history-header h3 {
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.btn-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.btn-close:hover {
+  border-color: var(--critical);
+  color: var(--critical);
+}
+
+.history-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.history-tabs button {
+  flex: 1;
+  padding: 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.history-tabs button.active {
+  color: var(--accent-cyan);
+  border-bottom: 2px solid var(--accent-cyan);
+}
+
+.history-content {
+  padding: 16px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.history-item {
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.history-time {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.history-stats {
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.history-stats .critical { color: var(--critical); }
+.history-stats .high { color: var(--high); }
+.history-stats .medium { color: var(--medium); }
+.history-stats .low { color: var(--low); }
+
+.history-total {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.change-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.change-type {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.change-type.added { color: var(--low); }
+.change-type.removed { color: var(--critical); }
+.change-type.severity_changed { color: var(--medium); }
+
+.change-port {
+  font-family: var(--font-mono);
+  color: var(--accent-cyan);
+}
+
+.change-time {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.stats-trend {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.trend-item {
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.trend-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.trend-bar {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  margin-bottom: 4px;
+}
+
+.trend-fill {
+  height: 100%;
+}
+
+.trend-fill.critical { background: var(--critical); }
+.trend-fill.high { background: var(--high); }
+
+.trend-value {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
 /* Loading State */
 .loading-state {
   display: flex;
@@ -894,14 +1307,20 @@ body {
   margin-top: 40px;
 }
 
+.footer-features {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--accent-cyan);
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
-  .stats-row {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  
   .charts-section {
     grid-template-columns: 1fr;
+  }
+  
+  .history-panel {
+    width: 100%;
   }
 }
 
@@ -923,10 +1342,6 @@ body {
   
   .stats-row {
     grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .stat-card.risk-score {
-    grid-column: span 2;
   }
   
   .table-container {

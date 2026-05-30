@@ -1,18 +1,20 @@
 {
   "name": "port-security-radar",
-  "version": "2.0.0",
-  "description": "Lightweight web dashboard for auditing Linux listening ports and exposure risks - Vue 3 Edition",
+  "version": "3.0.0",
+  "description": "Lightweight web dashboard for auditing Linux listening ports and exposure risks - Vue 3 Edition with History, Alerts & Docker Support",
   "main": "server.js",
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server.js",
-    "scan": "node scanner.js --json"
+    "scan": "node scanner.js --json",
+    "firewall": "node scanner.js --firewall"
   },
   "dependencies": {
     "@fastify/static": "^7.0.0",
+    "better-sqlite3": "^11.0.0",
     "fastify": "^4.26.0",
     "vue": "^3.4.0",
     "chart.js": "^4.4.0",
@@ -30,7 +32,10 @@
     "scanner",
     "dashboard",
     "fastify",
-    "vue"
+    "vue",
+    "docker",
+    "monitoring",
+    "firewall"
   ],
   "author": "",
   "license": "MIT",

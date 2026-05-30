@@ -5,6 +5,11 @@ const execFileAsync = promisify(execFile);
 const PUBLIC_OK_PORTS = new Set(['22', '80', '443']);
 const SENSITIVE_PORTS = new Set(['2375', '2376', '3306', '5432', '6379', '27017', '9200', '9300', '11211', '15672', '5672', '8080', '8443', '9000', '9443']);
 
+// Scan cache
+let lastScan = null;
+let lastScanTime = 0;
+const CACHE_TTL = 10000; // 10 seconds
+
 function normalizeAddress(address) {
   return (address || '').replace(/^\[|\]$/g, '').replace(/%.*$/, '');
 }
@@ -23,7 +28,7 @@ function classifyAddress(address) {
 
 function parseProcess(proc) {
   if (!proc) return { process: '', pid: '' };
-  const m = proc.match(/users:\(\(\"([^\"]+)\",pid=(\d+)/);
+  const m = proc.match(/users:\(\("([^"]+)",pid=(\d+)/);
   if (m) return { process: m[1], pid: m[2] };
   return { process: proc, pid: '' };
 }
@@ -83,27 +88,109 @@ function parseSsLine(line) {
   return { netid, state, address, port, bindType, severity, tag, advice, process: p.process, pid: p.pid, raw: line };
 }
 
+// Docker container detection
+async function getDockerContainers() {
+  try {
+    const { stdout } = await execFileAsync('docker', ['ps', '--format', '{{.Names}}\t{{.Ports}}\t{{.Image}}'], { timeout: 5000 });
+    const containers = {};
+    stdout.split('\n').filter(Boolean).forEach(line => {
+      const [name, ports, image] = line.split('\t');
+      if (ports) {
+        // Parse port mappings like "0.0.0.0:8080->80/tcp"
+        const portMatches = ports.match(/0\.0\.0\.0:(\d+)->/g) || [];
+        portMatches.forEach(match => {
+          const port = match.match(/:(\d+)->/)[1];
+          containers[port] = { name, image };
+        });
+      }
+    });
+    return containers;
+  } catch {
+    return {};
+  }
+}
+
 async function scan() {
-  const { stdout } = await execFileAsync('ss', ['-tulnp'], { timeout: 10000, maxBuffer: 1024 * 1024 * 2 });
+  const now = Date.now();
+  
+  // Return cached result if within TTL
+  if (lastScan && (now - lastScanTime) < CACHE_TTL) {
+    return { ...lastScan, cached: true };
+  }
+
+  // Get Docker containers and ss output in parallel
+  const [dockerContainers, { stdout }] = await Promise.all([
+    getDockerContainers(),
+    execFileAsync('ss', ['-tulnp'], { timeout: 10000, maxBuffer: 1024 * 1024 * 2 })
+  ]);
+
   const rows = stdout.split('\n').map(parseSsLine).filter(Boolean).filter(r => r.port);
+  
+  // Enrich with Docker info
+  rows.forEach(row => {
+    if (dockerContainers[row.port]) {
+      row.docker = dockerContainers[row.port];
+      row.tag = `Docker: ${dockerContainers[row.port].name}`;
+    }
+  });
+
   const rank = { critical: 0, high: 1, medium: 2, low: 3 };
   rows.sort((a, b) => (rank[a.severity] - rank[b.severity]) || Number(a.port) - Number(b.port) || a.address.localeCompare(b.address));
+  
   const summary = rows.reduce((acc, r) => {
     acc.total++;
     acc[r.severity] = (acc[r.severity] || 0) + 1;
     acc.bindTypes[r.bindType] = (acc.bindTypes[r.bindType] || 0) + 1;
     acc.protocols[r.netid] = (acc.protocols[r.netid] || 0) + 1;
+    if (r.docker) acc.dockerContainers = (acc.dockerContainers || 0) + 1;
     return acc;
-  }, { total: 0, critical: 0, high: 0, medium: 0, low: 0, bindTypes: {}, protocols: {} });
+  }, { total: 0, critical: 0, high: 0, medium: 0, low: 0, bindTypes: {}, protocols: {}, dockerContainers: 0 });
+  
   summary.exposed = summary.critical + summary.high + summary.medium;
-  return { scannedAt: new Date().toISOString(), summary, ports: rows };
+  
+  const result = { scannedAt: new Date().toISOString(), summary, ports: rows };
+  
+  // Update cache
+  lastScan = result;
+  lastScanTime = now;
+  
+  return result;
+}
+
+// Generate firewall rules suggestion
+function generateFirewallRules(ports) {
+  const rules = [];
+  
+  ports.forEach(p => {
+    if (p.bindType === 'public-bind' && p.severity !== 'low') {
+      if (p.severity === 'critical') {
+        rules.push(`# CRITICAL: Block ${p.process || 'unknown'} port ${p.port}`);
+        rules.push(`iptables -A INPUT -p ${p.netid} --dport ${p.port} -j DROP`);
+      } else if (p.severity === 'high') {
+        rules.push(`# HIGH: Restrict ${p.process || 'unknown'} port ${p.port} to localhost`);
+        rules.push(`iptables -A INPUT -p ${p.netid} --dport ${p.port} -s 127.0.0.1 -j ACCEPT`);
+        rules.push(`iptables -A INPUT -p ${p.netid} --dport ${p.port} -j DROP`);
+      }
+    }
+  });
+  
+  return rules.join('\n');
 }
 
 if (require.main === module) {
   scan().then(result => {
-    if (process.argv.includes('--json')) console.log(JSON.stringify(result, null, 2));
-    else console.table(result.ports.map(({port,address,severity,tag,process,pid,advice}) => ({port,address,severity,tag,process,pid,advice})));
+    if (process.argv.includes('--json')) {
+      console.log(JSON.stringify(result, null, 2));
+    } else if (process.argv.includes('--firewall')) {
+      console.log(generateFirewallRules(result.ports));
+    } else {
+      console.table(result.ports.map(({port,address,severity,tag,process,pid,advice,docker}) => ({
+        port,address,severity,tag,process,pid,
+        docker: docker ? `${docker.name} (${docker.image})` : '-',
+        advice
+      })));
+    }
   }).catch(err => { console.error(err.message || err); process.exit(1); });
 }
 
-module.exports = { scan };
+module.exports = { scan, generateFirewallRules };

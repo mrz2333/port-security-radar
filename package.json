@@ -1,7 +1,7 @@
 {
   "name": "port-security-radar",
-  "version": "3.0.0",
-  "description": "Lightweight web dashboard for auditing Linux listening ports and exposure risks - Vue 3 Edition with History, Alerts & Docker Support",
+  "version": "4.0.0",
+  "description": "Lightweight web dashboard for auditing Linux listening ports and exposure risks - Vue 3 Edition with History, Alerts, Docker, PDF Export, Themes & Keyboard Shortcuts",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
@@ -35,7 +35,8 @@
     "vue",
     "docker",
     "monitoring",
-    "firewall"
+    "firewall",
+    "pdf"
   ],
   "author": "",
   "license": "MIT",

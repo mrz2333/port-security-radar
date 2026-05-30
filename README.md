@@ -1,4 +1,4 @@
-# 🛡️ Port Security Radar v3.0
+# 🛡️ Port Security Radar v4.0
 
 [English](#english) | [中文](#中文)
 
@@ -10,7 +10,7 @@
 
 A lightweight web dashboard for auditing Linux server listening ports, identifying public network bindings, sensitive service exposure, Docker port direct connections, and other common risks. Provides actionable security hardening recommendations for operations teams.
 
-> **v3.0 Major Update**: Vue 3 + Chart.js rewrite with cyberpunk UI, real-time data visualization, historical records, Docker awareness, firewall rules generation, and Telegram alerts!
+> **v4.0 Major Update**: Vue 3 + Chart.js rewrite with cyberpunk UI, real-time data visualization, historical records, Docker awareness, firewall rules generation, Telegram alerts, PDF export, theme switching, and keyboard shortcuts!
 
 ### ✨ Features
 
@@ -23,11 +23,17 @@ A lightweight web dashboard for auditing Linux server listening ports, identifyi
 - 📈 **Historical Records**: SQLite-based scan history with change detection
 - 🔔 **Telegram Alerts**: Notifications for critical port changes
 - 🔥 **Firewall Rules**: Auto-generated iptables rules suggestions
-- 📥 **Export**: CSV and JSON export support
+- 📥 **Export**: CSV, JSON, and PDF export support
 - 🔄 **Auto-refresh**: Updates every 60 seconds
 - 🔍 **Smart Search**: Multi-dimensional search and filtering
 - 📱 **Mobile Responsive**: Desktop table view, mobile card view
 - 🎯 **Cyberpunk UI**: Dark theme with neon effects and radar animation
+- 🌓 **Theme Switching**: Dark and light theme support
+- 🔗 **Connection Tracking**: Active connection count per port
+- 📋 **Process Details**: Click to view full command line and process info
+- ⌨️ **Keyboard Shortcuts**: Quick actions with keyboard
+- 🔊 **Sound Alerts**: Audio notification for critical findings
+- 📈 **Trend Charts**: 7-day historical trend visualization
 
 ### 🖼️ Preview
 
@@ -37,12 +43,16 @@ The dashboard includes:
 - Total listening ports / sensitive public ports
 - Critical / High / Medium / Low risk counts
 - Docker container count
+- Active connection count
+- System info (hostname, uptime, load)
 - Risk distribution pie chart
 - Protocol distribution polar chart
 - Bind type bar chart
+- 7-day trend line chart
 - Firewall rules suggestions
 - Port details table (desktop) / cards (mobile)
 - Historical scan records panel
+- Process detail modal
 
 ### 🚀 Quick Start
 
@@ -90,27 +100,36 @@ npm run scan -- --json
 npm run firewall
 ```
 
+### ⌨️ Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Space` | Rescan |
+| `H` | Toggle history panel |
+| `T` | Toggle theme |
+| `C` | Export CSV |
+| `J` | Export JSON |
+| `P` | Generate PDF |
+| `/` | Focus search |
+| `?` | Show/hide shortcuts |
+| `Esc` | Close panels |
+
 ### 🔐 Authentication
 
 Set `API_KEY` environment variable to enable Bearer token authentication:
 
 ```bash
-API_KEY=your-secret-key npm start
+API_KEY=*** npm start
 ```
 
 Then include the header in requests:
 ```
-Authorization: Bearer your-secret-key
-```
-
-### 🔔 Telegram Alerts
+Authorization: Bearer your-s...n### 🔔 Telegram Alerts
 
 Configure Telegram notifications for critical port changes:
 
 ```bash
-TELEGRAM_BOT_TOKEN=your-bot-token
-TELEGRAM_CHAT_ID=your-chat-id
-npm start
+TELEGRAM_BOT_TOKEN=your-b...nnpm start
 ```
 
 Get your bot token from [@BotFather](https://t.me/botfather) and chat ID from [@userinfobot](https://t.me/userinfobot).
@@ -164,7 +183,7 @@ MIT License
 
 一个轻量级 Web 端口安全面板，用于快速扫描 Linux 服务器本机监听端口，识别公网绑定、敏感服务暴露、Docker 端口直连等常见风险，并给出面向运维场景的加固建议。
 
-> **v3.0 重大更新**：全新 Vue 3 + Chart.js 重构，赛博朋克风格 UI，实时数据可视化，历史记录，Docker 感知，防火墙规则生成，Telegram 告警！
+> **v4.0 重大更新**：全新 Vue 3 + Chart.js 重构，赛博朋克风格 UI，实时数据可视化，历史记录，Docker 感知，防火墙规则生成，Telegram 告警，PDF 导出，主题切换，键盘快捷键！
 
 ### ✨ 功能特性
 
@@ -177,11 +196,17 @@ MIT License
 - 📈 **历史记录**：基于 SQLite 的扫描历史和变化检测
 - 🔔 **Telegram 告警**：关键端口变化时发送通知
 - 🔥 **防火墙规则**：自动生成 iptables 规则建议
-- 📥 **数据导出**：支持 CSV 和 JSON 导出
+- 📥 **数据导出**：支持 CSV、JSON 和 PDF 导出
 - 🔄 **自动刷新**：每 60 秒自动更新
 - 🔍 **智能搜索**：多维度搜索和过滤
 - 📱 **移动端适配**：桌面端表格视图，手机端卡片视图
 - 🎯 **赛博朋克 UI**：深色主题，霓虹光效，雷达动画
+- 🌓 **主题切换**：深色/浅色主题支持
+- 🔗 **连接追踪**：每个端口的活跃连接数
+- 📋 **进程详情**：点击查看完整命令行和进程信息
+- ⌨️ **键盘快捷键**：快速操作
+- 🔊 **声音告警**：发现高危端口时声音提醒
+- 📈 **趋势图表**：7天历史趋势可视化
 
 ### 🖼️ 界面预览
 
@@ -191,12 +216,16 @@ MIT License
 - 监听端口总数 / 敏感公网端口数量
 - 高危 / 高 / 中 / 低风险统计
 - Docker 容器数量
+- 活跃连接数
+- 系统信息（主机名、运行时间、负载）
 - 风险分布饼图
 - 协议分布极坐标图
 - 绑定类型柱状图
+- 7天趋势折线图
 - 防火墙规则建议
 - 端口详情表格（桌面端）/ 卡片（移动端）
 - 扫描历史记录面板
+- 进程详情弹窗
 
 ### 🚀 快速开始
 
@@ -244,27 +273,36 @@ npm run scan -- --json
 npm run firewall
 ```
 
+### ⌨️ 键盘快捷键
+
+| 按键 | 功能 |
+|------|------|
+| `Space` | 重新扫描 |
+| `H` | 切换历史面板 |
+| `T` | 切换主题 |
+| `C` | 导出 CSV |
+| `J` | 导出 JSON |
+| `P` | 生成 PDF |
+| `/` | 聚焦搜索框 |
+| `?` | 显示/隐藏快捷键 |
+| `Esc` | 关闭面板 |
+
 ### 🔐 认证配置
 
 设置 `API_KEY` 环境变量启用 Bearer token 认证：
 
 ```bash
-API_KEY=your-secret-key npm start
+API_KEY=*** npm start
 ```
 
 请求时需要包含 Header：
 ```
-Authorization: Bearer your-secret-key
-```
-
-### 🔔 Telegram 告警
+Authorization: Bearer your-s...n### 🔔 Telegram 告警
 
 配置 Telegram 通知以接收关键端口变化告警：
 
 ```bash
-TELEGRAM_BOT_TOKEN=your-bot-token
-TELEGRAM_CHAT_ID=your-chat-id
-npm start
+TELEGRAM_BOT_TOKEN=your-b...nnpm start
 ```
 
 从 [@BotFather](https://t.me/botfather) 获取 Bot Token，从 [@userinfobot](https://t.me/userinfobot) 获取 Chat ID。
